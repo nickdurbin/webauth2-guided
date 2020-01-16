@@ -1,40 +1,50 @@
-const router = require('express').Router();
-const bcrypt = require('bcryptjs');
+const bcrypt = require("bcryptjs")
+const express = require("express")
+const usersModel = require("../users/users-model")
 
-const Users = require('../users/users-model.js');
+const router = express.Router()
 
-// for endpoints beginning with /api/auth
-router.post('/register', (req, res) => {
-  let user = req.body;
-  const hash = bcrypt.hashSync(user.password, 10); // 2 ^ n
-  user.password = hash;
+router.post("/register", async (req, res, next) => {
+  try {
+    const saved = await usersModel.add(req.body)
+    
+    res.status(201).json(saved)
+  } catch (err) {
+    next(err)
+  }
+})
 
-  Users.add(user)
-    .then(saved => {
-      res.status(201).json(saved);
+router.post("/login", async (req, res, next) => {
+  try {
+    const { username, password } = req.body
+    const user = await usersModel.findBy({ username }).first()
+    // since bcrypt hashes generate different results due to the salting,
+    // we rely on the magic internals to compare hashes (rather than doing
+    // it manulally by re-hashing and comparing)
+    const passwordValid = await bcrypt.compare(password, user.password)
+
+    if (user && passwordValid) {
+      res.status(200).json({
+        message: `Welcome ${user.username}!`,
+      })
+    } else {
+      res.status(401).json({
+        message: "Invalid Credentials",
+      })
+    }
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.get("/protected", async (req, res, next) => {
+  try {
+    res.json({
+      message: "You are authorized",
     })
-    .catch(error => {
-      res.status(500).json(error);
-    });
-});
+  } catch (err) {
+    next(err)
+  }
+})
 
-router.post('/login', (req, res) => {
-  let { username, password } = req.body;
-
-  Users.findBy({ username })
-    .first()
-    .then(user => {
-      if (user && bcrypt.compareSync(password, user.password)) {
-        res.status(200).json({
-          message: `Welcome ${user.username}!`,
-        });
-      } else {
-        res.status(401).json({ message: 'Invalid Credentials' });
-      }
-    })
-    .catch(error => {
-      res.status(500).json(error);
-    });
-});
-
-module.exports = router;
+module.exports = router
